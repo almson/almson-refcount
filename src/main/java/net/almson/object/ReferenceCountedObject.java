@@ -29,12 +29,35 @@ abstract class ReferenceCountedObject implements AutoCloseable {
 
       private static final AtomicLongFieldUpdater<ReferenceCountedObject> 
     REFERENCE_COUNT_UPDATER = AtomicLongFieldUpdater.newUpdater (ReferenceCountedObject.class, "referenceCount");
-
+      
+      /**
+       * Equivalent to calling {@link #ReferenceCountedObject(boolean) this(boolean)} with a value of {@code false}.
+       */
+      protected
+    ReferenceCountedObject() { this (false); }
+    
+      /**
+       * @param idempotentClose if {@code true}, do not throw an exception if {@code close} or {@code release} 
+       *        is called more often than necessary, ie if the reference count becomes negative.
+       *        This is the encouraged behavior of {@link java.lang.AutoCloseable#close()}, 
+       *        although the contract of that method explicitly states that idempotency is not required.
+       *        Nevertheless, passing {@code false} may help detect bugs.
+       *        Logic which will not {@code release} a destroyed object is more likely to be correct overall,
+       *        particularly if the object may be shared.
+       */
+      protected
+    ReferenceCountedObject (boolean idempotentClose) {
+        
+            this.idempotentClose = idempotentClose;
+        }
       
     
       @SuppressWarnings("unused")
       private volatile long 
     referenceCount = 1;
+      
+      private final boolean
+    idempotentClose;
     
       private final ResourceReference 
     resourceReference = LEAK_DETECTOR.tryRegister (this);
@@ -107,7 +130,7 @@ abstract class ReferenceCountedObject implements AutoCloseable {
                 
                 return true;
             }
-            else if (newCount <= -1) 
+            else if (!idempotentClose && newCount <= -1) 
             {
                 throw new AssertionError ("Tried to release a destroyed object"
                         + (resourceReference != null ? resourceReference.getTracesString() : ""));
@@ -158,5 +181,15 @@ abstract class ReferenceCountedObject implements AutoCloseable {
         
             if (resourceReference != null)
                 resourceReference.trace (message);
+        }
+    
+      /**
+       * May be used to assert that the object hasn't been accidentally destroyed.
+       * Because of a race condition, among other reasons, do not use this method for any purpose other than debugging.
+       */
+      protected final boolean
+    isDestroyed() {
+        
+            return referenceCount <= 0;
         }
 }
