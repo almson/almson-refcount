@@ -2,9 +2,9 @@
 
 `almson-refcount` is a reference counting implementation for Java derived from [Netty](netty.io). It aims to be robust, simple, efficient, and clever.
 
-Reference counting is like a more flexible version of `AutoCloseable`. It allows you to do manual, deterministic resource management while letting you pass your resources between objects and methods without deciding on a chain of ownership. Each object has a "reference count" which is initially set to 1. The `close` or `release` method (they both do the same thing) decrements the reference count. When the reference count reaches 0, the object's `destroy` method is called, performing any necessary cleanup. What distinguishes reference counting different from AutoCloseable is the `retain` method, which increments the reference count. Call `retain` on objects which someone else might destroy. This way, the object won't be destroyed until everyone stops using it. Make sure the number of `close/release` calls is 1 more than the number of calls to `retain` by the time you are done using the object, or you will cause a resource leak! Thankfully, you will be warned when you call `close/release` too often or too little.
+Reference counting is like a more flexible version of `AutoCloseable`. It allows you to do manual, deterministic resource management while letting you pass your resources between objects and methods without deciding on a chain of ownership. Each object has a "reference count" which is initially set to 1. The `close` or `release` method (they both do the same thing) decrements the reference count. When the reference count reaches 0, the object's `destroy` method is called, performing any necessary cleanup. What makes reference counting different from AutoCloseable is the `retain` method, which increments the reference count. Call `retain` on objects which someone else might destroy. This way, the object won't be destroyed until both of you call `close`. Make sure the number of `close/release` calls is 1 more than the number of calls to `retain` by the time everyone is done using the object, or you will cause a resource leak! Thankfully, you will be warned when you call `close/release` too often or too little.
 
-Unfortunately, successfully applying reference counting can be a little tricky. You need some rules by which retain and release are called, and you have to avoid reference cycles. You should read up about reference counting to understand this further. However, it is much easier to use reference counting when you only need it for a few resource-holding objects than when it is used for _all_ objects (as was the case in Objective-C). The rules can be looser and reference cycles need never occur.
+Unfortunately, successfully applying reference counting can be a little tricky. You need some rules by which retain and release are called, and you have to avoid reference cycles. You may want to read up about reference counting to understand this better. However, suffice it to say that it is fairly easy to use reference counting for only a few resource-holding objects, as opposed to using it for _all_ objects (as was the case in Objective-C). The rules can be looser and you can not worry about reference cycles.
 
 # Features
 
@@ -12,7 +12,7 @@ The basic reference counting functionality is simple and straightforward. There 
 
 There is no finalization mechanism which tries to call `destroy` in case you forget to call release! Finalization presents big challenges, including concurrency issues and even premature finalization, especially in the general case. (If you insist on having finalizers, you can still use them or the higher-performance `java.lang.ref.Cleaner`.)
 
-Instead, there is a clever leak detection system. It uses a similar mechanism to finalization. Because its only responsibility is detecting leaks and recording debugging info, there is nothing you need to do to make it work correctly (except turn it on).
+Instead, there is a clever leak detection system. It uses a similar mechanism to finalization, however because its only responsibility is detecting leaks and recording debugging info, there is nothing you need to do to make it work correctly.
 
 # Example
 
@@ -60,7 +60,7 @@ Instead, there is a clever leak detection system. It uses a similar mechanism to
 
 # Leak detection
 
-The `ResourceLeakDetector` class manages the leak detection mechanism. It has several options, primarily `level`. Currently, these need to be set as JDK options. To enable the highest level of leak detection, pass `java -DleakDetection.level=DEBUG` when launching your application. The default level is `LIGHT`.
+The `ResourceLeakDetector` class manages the leak detection mechanism. It has several options, primarily `level`. Currently, these need to be set as JDK options. To enable the highest level of leak detection, pass `java -DleakDetection.level=DEBUG` when launching your application. The default level is `FULL`.
 
 The available levels are:
 

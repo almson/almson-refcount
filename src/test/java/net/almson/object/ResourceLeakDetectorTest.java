@@ -23,12 +23,18 @@ import java.util.Queue;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.joor.Reflect;
 import org.junit.Assert;
 
 public class ResourceLeakDetectorTest {
 
     @Test(timeout = 60000)
     public void testConcurrentUsage() throws Throwable {
+        
+        TestResourceLeakDetector detector = new TestResourceLeakDetector();
+        // Hack to modify the LeakDetector. I'm still grappling with whether it should be publically modifiable.
+        Reflect.on (ReferenceCountedObject.class).set ("LEAK_DETECTOR", detector);
+        
         final AtomicBoolean finished = new AtomicBoolean();
         final AtomicReference<Object> error = new AtomicReference<>();
         // With 50 threads issue #6087 is reproducible on every run.
@@ -36,7 +42,7 @@ public class ResourceLeakDetectorTest {
         final CyclicBarrier barrier = new CyclicBarrier(threads.length);
         for (int i = 0; i < threads.length; i++) {
             Thread t = new Thread(new Runnable() {
-                Queue<LeakAwareResource> resources = new ArrayDeque<>(100);
+                Queue<ReferenceCountedObject> resources = new ArrayDeque<>(100);
 
                 @Override
                 public void run() {
@@ -48,9 +54,8 @@ public class ResourceLeakDetectorTest {
 
                             // Allocate 100 LeakAwareResource per run and close them after it.
                             for (int a = 0; a < 100; a++) {
-                                SimpleResource resource = new SimpleResource();
-                                ResourceReference leak = SimpleResource.detector.tryRegister (resource);
-                                LeakAwareResource leakAwareResource = new LeakAwareResource(resource, leak);
+                                ReferenceCountedObject leakAwareResource = new ReferenceCountedObject() { @Override protected void destroy() { }};
+                                leakAwareResource.trace ("We're adding it to 'resources'");
                                 resources.add(leakAwareResource);
                             }
                             if (closeResources(true)) {
@@ -69,11 +74,12 @@ public class ResourceLeakDetectorTest {
 
                 private boolean closeResources(boolean checkClosed) {
                     for (;;) {
-                        LeakAwareResource r = resources.poll();
+                        ReferenceCountedObject r = resources.poll();
                         if (r == null) {
                             return false;
                         }
-                        boolean closed = r.close();
+                        r.trace ("We just retrieved it from 'resources'");
+                        boolean closed = r.release();
                         if (checkClosed && !closed) {
                             error.compareAndSet(null, "ResourceLeak.close() returned 'false' but expected 'true'");
                             return true;
@@ -91,52 +97,18 @@ public class ResourceLeakDetectorTest {
         }
 
         // Check if we had any leak reports in the ResourceLeakDetector itself
-        SimpleResource.detector.assertNoErrors();
+        detector.assertNoErrors();
 
         if (error.get() != null)
             Assert.fail (error.get().toString());
-    }
-
-    private interface Resource {
-        boolean close();
-    }
-
-    private static final class SimpleResource implements Resource {
-        // Sample every allocation
-        static final TestResourceLeakDetector detector = new TestResourceLeakDetector();
-
-        @Override
-        public boolean close() {
-            return true;
-        }
-    }
-
-    // Mimic the way how we implement our classes that should help with leak detection
-    private static final  class LeakAwareResource implements Resource {
-        private final Resource resource;
-        private final ResourceReference leak;
-
-        LeakAwareResource(Resource resource, ResourceReference leak) {
-            this.resource = resource;
-            this.leak = leak;
-        }
-
-        @Override
-        public boolean close() {
-            
-            // Comment-out synchronized to see premature finalization in action!
-            synchronized (resource)
-            {
-                return leak.close();
-            }
-        }
     }
 
     private static final class TestResourceLeakDetector extends ResourceLeakDetector {
         
 //        TestResourceLeakDetector() { super (Level.FULL, 1, 0); }
 //        TestResourceLeakDetector() { super (Level.DEBUG, 1, 1); }
-        TestResourceLeakDetector() { super (Level.DEBUG, 1, 2); }
+//        TestResourceLeakDetector() { super (Level.DEBUG, 1, 2); }
+        TestResourceLeakDetector() { super (Level.DEBUG, 1, 10); }
 
         private final AtomicReference<String> error = new AtomicReference<>();
 

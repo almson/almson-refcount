@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import org.slf4j.helpers.MessageFormatter;
 
 final class ResourceReference extends WeakReference<Object> {
 
@@ -44,13 +45,16 @@ final class ResourceReference extends WeakReference<Object> {
     private final String referentClassName;
     private final int targetTraceCount;
     
+    private final Set<String> suppressedStackTraceEntries;
+    
     private static final String NEWLINE = System.lineSeparator();
     
     ResourceReference
                 (Object referent
                 , ReferenceQueue<Object> refQueue
                 , ResourceReference refListHead
-                , int traceCount) {
+                , int traceCount
+                , Set<String> suppressedStackTraceEntries) {
         
             super(referent, refQueue);
 
@@ -59,6 +63,7 @@ final class ResourceReference extends WeakReference<Object> {
             this.nDroppedTraces = 0;
             this.referentClassName = referent.getClass().getName();
             this.targetTraceCount = traceCount;
+            this.suppressedStackTraceEntries = suppressedStackTraceEntries;
             
             synchronized (referent)
             {
@@ -82,6 +87,7 @@ final class ResourceReference extends WeakReference<Object> {
             this.refListHead = this;
             this.referentClassName = null;
             this.targetTraceCount = 0;
+            this.suppressedStackTraceEntries = null;
         }
     
       /**
@@ -128,6 +134,32 @@ final class ResourceReference extends WeakReference<Object> {
             return false;
         }
 
+      public void 
+    trace (String message, Object param1) {
+        
+            if (targetTraceCount <= 1)
+                return;
+            
+            trace (MessageFormatter.format(message, param1).getMessage());
+        }
+
+      public void 
+    trace (String message, Object param1, Object param2) {
+        
+            if (targetTraceCount <= 1)
+                return;
+            
+            trace (MessageFormatter.format(message, param1, param2).getMessage());
+        }
+
+      public void 
+    trace (String message, Object... argArray) {
+        
+            if (targetTraceCount <= 1)
+                return;
+            
+            trace (MessageFormatter.format(message, argArray).getMessage());
+        }
 
       /**
        * This method works by exponentially backing off as more records are present in the stack. Each record has a
@@ -211,7 +243,7 @@ final class ResourceReference extends WeakReference<Object> {
             Set<String> seen = new HashSet<>(nTraces);
             for (int i = 1; head != Trace.BOTTOM; i++, head = head.prev) 
             {   
-                String stackTrace = getStackTraceString (head, head.prev == Trace.BOTTOM ? 3 : 1);
+                String stackTrace = getStackTraceString (head);
                 if (seen.add(stackTrace))
                 {
                     if (head.prev == Trace.BOTTOM)
@@ -222,7 +254,7 @@ final class ResourceReference extends WeakReference<Object> {
                            .append(NEWLINE)
                            .append(stackTrace);
                     else
-                        buf.append("\tRecent call to trace() #").append(i++).append(": ").append(head.message != null ? head.message : "")
+                        buf.append("\tRecent call to trace() #").append(i).append(": ").append(head.message != null ? head.message : "")
                            .append(NEWLINE)
                            .append(stackTrace);
                 } 
@@ -231,14 +263,14 @@ final class ResourceReference extends WeakReference<Object> {
             }
 
             if (nDuplicates > 0) {
-                buf.append("\t ")
+                buf.append("\t")
                    .append(nDuplicates)
                    .append(" traces were discarded because they were duplicates")
                    .append(NEWLINE);
             }
 
             if (nDropped > 0) {
-                buf.append("\t ")
+                buf.append("\t")
                    .append(nDropped)
                    .append(" traces were discarded because the target trace count is ")
                    .append(targetTraceCount)
@@ -253,19 +285,17 @@ final class ResourceReference extends WeakReference<Object> {
         }
 
       private String 
-    getStackTraceString (Throwable t, int skip) {
+    getStackTraceString (Throwable t) {
 
             StringBuilder buf = new StringBuilder(2048);
 
-            // Append the stack trace.
             StackTraceElement[] array = t.getStackTrace();
-            // Skip the first element.
-            out: for (int i = 1; i < array.length; i++) 
+            for (int i = 0; i < array.length; i++) 
             {
                 StackTraceElement element = array[i];
 
-//                    if (suppressedStackTraceEntries.contains (element.getClassName() + "#" + element.getMethodName()))
-//                        continue;
+                if (suppressedStackTraceEntries.contains (element.getClassName() + "." + element.getMethodName()))
+                    continue;
 
                 buf.append("\t\tat ");
                 buf.append(element.toString());
