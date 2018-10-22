@@ -22,10 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Detects leaks in ReferenceCountedObjects using WeakReferences.
- * Set the leak detection level using the Java system property {@code -DleakDetection.level}.
- * Take a look at the documentation of each value of {@link Level}.
- * The default level is {@code FULL}.
+ * Detects leaks of instances of classes {@link ReferenceCountedObject} and {@link CloseableObject}.
+ * Set the {@link Level leak detection level} using the Java system property {@code -DleakDetection.level}.
  */
 @lombok.extern.slf4j.Slf4j
 public class ResourceLeakDetector {
@@ -51,8 +49,7 @@ public class ResourceLeakDetector {
         DISABLED,
         /**
          * Enables sampling leak detection. 
-         * Every Nth allocated ReferenceCountedObject has a finalizer attached
-         * which checks that it has been destroyed (reference count is 0).
+         * Every Nth allocated resource is registered with the leak detector.
          * This level has little impact on performance even in applications that allocate many objects.
          * You can control the sampling frequency with {@code -DleakDetection.samplingInterval}.
          * The default value is {@code 128}.
@@ -60,16 +57,14 @@ public class ResourceLeakDetector {
         LIGHT,
         /**
          * Enables leak detection for all objects. 
-         * Every allocated ReferenceCountedObject has a finalizer attached
-         * which checks that it has been destroyed (reference count is 0).
+         * Every allocated resource is registered with the leak detector.
          */
         FULL,
         /**
          * Enables leak detection with tracing of allocation and use. 
-         * Every allocated ReferenceCountedObject has a finalizer attached 
-         * which checks that it has been destroyed (reference count is 0).
+         * Every allocated resource is registered with the leak detector.
          * Additionally, the stack trace of its allocation is recorded.
-         * You may call the method {@link ReferenceCountedObject#trace()} while using using the object 
+         * You may call {@link ReferenceCountedObject#trace() trace} while using using the object 
          * in order to collect additional stack traces.
          * To minimize memory usage, not every stack trace is stored.
          * You can control the number of stack traces that are stored in memory with {@code -DleakDetection.traceCount}.
@@ -151,6 +146,8 @@ public class ResourceLeakDetector {
             suppressedStackTraceEntries.add ("net.almson.object.ResourceLeakDetector.tryRegister");
             suppressedStackTraceEntries.add ("net.almson.object.ReferenceCountedObject.<init>");
             suppressedStackTraceEntries.add ("net.almson.object.ReferenceCountedObject.trace");
+            suppressedStackTraceEntries.add ("net.almson.object.CloseableObject.<init>");
+            suppressedStackTraceEntries.add ("net.almson.object.CloseableObject.trace");
         }
 
     private final Level level;
@@ -237,16 +234,14 @@ public class ResourceLeakDetector {
             if (level == Level.DEBUG)
             {
                 String traces = ref.getTracesString();
-                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected. "
-                        + "See the documentation of net.almson.object.ReferenceCountedObject."
+                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected."
                         + traces
                         + (traceCount == 0 ? System.lineSeparator() + "\tStack traces are not being stored. To store allocation stack traces specify the JVM option -D"+PROP_TRACE_COUNT+"=1 or greater." : "")
                         + (traceCount == 1 ? System.lineSeparator() + "\tOnly the allocation stack trace was stored. To store additional stack traces specify the JVM option -D"+PROP_TRACE_COUNT+"=2 or greater." : "")
-                        + (traceCount >= 2 ? System.lineSeparator() + "\tTo trace the lifetime of the object more thoroughly, make more frequent calls to ReferenceCountedObject.trace()." : "");
+                        + (traceCount >= 2 ? System.lineSeparator() + "\tTo trace the lifetime of the object more thoroughly, make more frequent calls to trace()." : "");
             }
             else
-                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected. "
-                        + "See the documentation of net.almson.object.ReferenceCountedObject. "
+                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected."
                         + "The log level is " + level + ", which does not record stack traces. "
 //                        + "To enable debugging, specify the JVM option '-D"+PROP_LEVEL+"="+Level.DEBUG.name().toLowerCase()+"' or call ResourceLeakDetector.setLevel().";
                         + "To enable debugging, specify the JVM option -D"+PROP_LEVEL+"="+Level.DEBUG;

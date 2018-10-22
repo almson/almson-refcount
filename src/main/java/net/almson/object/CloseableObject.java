@@ -15,77 +15,57 @@
  */
 package net.almson.object;
 
-import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
   /**
-   * The base class for reference counted objects.
+   * A base class for closeable objects with support for leak detection but not reference counting.
    * 
-   * <p> Reference counting is a more flexible version of {@code AutoCloseable}. 
-   * It allows you to do manual, deterministic resource management while letting you pass your resources 
-   * between objects and methods without deciding on a chain of ownership. 
-   * Each object has a "reference count" which is initially set to 1. 
-   * The {@code close} or {@code release} method (they both do the same thing) decrements the reference count. 
-   * When the reference count reaches 0, the object's {@code destroy} method is called, performing any necessary cleanup. 
-   * What makes reference counting different from AutoCloseable is the {@code retain} method, 
-   * which increments the reference count. Call {@code retain} on objects which someone else might destroy. 
-   * This way, the object won't be destroyed until everyone stops using it. 
-   * Make sure the number of {@code close/release} calls is 1 more than the number of calls to {@code retain}
-   * by the time you are done using the object and it becomes unreachable.
+   * <p> This base class provides the leak detection functionality of {@link ReferenceCountedObject}
+   * and {@link ResourceLeakDetector}, but does not offer {@code retain} and {@code release} methods.
    * 
-   * <p> This class is thread-safe as long as each thread invokes {@code retain} and {@code close/release}
-   * or synchronizes with one that does. The {@code destroy} method, invoked by the last thread which invokes 
-   * {@code close/release}, will be synchronized (ie, ordered) with all other threads which invoked {@code close/release}.
-   * 
-   * <p> There is no finalization mechanism which tries to call {@code destroy} in case you forget to call release! 
-   * Finalization presents big challenges, including concurrency issues and even premature finalization, 
-   * especially in the general case. 
-   * (If you insist on having finalizers, you may still use them or the higher-performance {@link java.lang.ref.Cleaner}.)
-   * 
-   * <p> Instead, a facility for detecting memory leaks is provided in the form of {@link ResourceLeakDetector}. 
-   * It uses a similar mechanism to finalization, however because of its narrow scope it works correctly.
-   * Leak detection is enabled by default, however you may wish to configure it to trade off overhead
-   * and debugging information.
-   * 
-   * @see ResourceLeakDetector
-   * @see AutoCloseable
+   * <p> This class does not offer any functional or performance benefits,
+   * and the choice to use it instead of {@code ReferenceCountedObject} is mainly esthetic. 
+   * The API offered by this class is simpler and more familiar to Java programmers.
    */
   public
-abstract class ReferenceCountedObject implements AutoCloseable {
+abstract class CloseableObject implements AutoCloseable {
       
       public static final ResourceLeakDetector
 //    LEAK_DETECTOR = ResourceLeakDetectorFactory.instance().newResourceLeakDetector();
     LEAK_DETECTOR = ResourceLeakDetector.newResourceLeakDetector();
 
-      private static final AtomicLongFieldUpdater<ReferenceCountedObject> 
-    REFERENCE_COUNT_UPDATER = AtomicLongFieldUpdater.newUpdater (ReferenceCountedObject.class, "referenceCount");
+      private static final AtomicIntegerFieldUpdater<CloseableObject> 
+    REFERENCE_COUNT_UPDATER = AtomicIntegerFieldUpdater.newUpdater (CloseableObject.class, "referenceCount");
       
-      /**
-       * Equivalent to calling {@link #ReferenceCountedObject(boolean) this(boolean)} with a value of {@code false}.
-       */
-      protected
-    ReferenceCountedObject() { this (false); }
-    
-      /**
-       * @param idempotentClose if {@code true}, do not throw an exception if {@code close} or {@code release} 
-       *        is called more often than necessary, ie if the reference count becomes negative.
-       *        This is the encouraged behavior of {@link java.lang.AutoCloseable#close()}, 
-       *        although the contract of that method explicitly states that idempotency is not required.
-       *        Nevertheless, passing {@code false} may help detect bugs.
-       *        Logic which will not {@code release} a destroyed object is more likely to be correct overall,
-       *        particularly if the object may be shared.
-       */
-      protected
-    ReferenceCountedObject (boolean idempotentClose) {
-        
-            this.idempotentClose = idempotentClose;
-        }
+//      /**
+//       * Equivalent to calling {@link #ReferenceCountedObject(boolean) this(boolean)} with a value of {@code false}.
+//       */
+//      protected
+//    CloseableObject() { this (false); }
+//    
+//      /**
+//       * @param idempotentClose if {@code true}, do not throw an exception if {@code close} or {@code release} 
+//       *        is called more often than necessary, ie if the reference count becomes negative.
+//       *        This is the encouraged behavior of {@link java.lang.AutoCloseable#close()}, 
+//       *        although the contract of that method explicitly states that idempotency is not required.
+//       *        Nevertheless, passing {@code false} may help detect bugs.
+//       *        Logic which will not {@code release} a destroyed object is more likely to be correct overall,
+//       *        particularly if the object may be shared.
+//       */
+//      protected
+//    CloseableObject (boolean idempotentClose) {
+//        
+//            this.idempotentClose = idempotentClose;
+//        }
       
     
-      private volatile long 
+      private volatile int
     referenceCount = 1;
       
-      private final boolean
-    idempotentClose;
+    // idempotentClose is assumed to always be true
+    // see javadoc of ReferenceCountedObject(boolean) constructor
+//      private final boolean
+//    idempotentClose;
     
       private final ResourceReference 
     resourceReference = LEAK_DETECTOR.tryRegister (this);
@@ -118,29 +98,29 @@ abstract class ReferenceCountedObject implements AutoCloseable {
     destroy();
 
 
-      /**
-       * Increments the reference count by {@code 1}.
-       * 
-       * @return this object
-       */
-      public final ReferenceCountedObject 
-    retain() {
-        
-            long oldCount = REFERENCE_COUNT_UPDATER.getAndIncrement (this);
-            
-            if (oldCount <= 0)
-            {
-                REFERENCE_COUNT_UPDATER.getAndDecrement (this); // not exactly safe, but better than nothing
-                
-                throw new AssertionError ("Resurrected a destroyed object" 
-                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
-            }
-            
-            if (resourceReference != null)
-                resourceReference.trace ("Object retained. Reference count is now {}", oldCount + 1);
-            
-            return this;
-        }
+//      /**
+//       * Increments the reference count by {@code 1}.
+//       * 
+//       * @return this object
+//       */
+//      public final CloseableObject 
+//    retain() {
+//        
+//            long oldCount = REFERENCE_COUNT_UPDATER.getAndIncrement (this);
+//            
+//            if (oldCount <= 0)
+//            {
+//                REFERENCE_COUNT_UPDATER.getAndDecrement (this); // not exactly safe, but better than nothing
+//                
+//                throw new AssertionError ("Resurrected a destroyed object" 
+//                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
+//            }
+//            
+//            if (resourceReference != null)
+//                resourceReference.trace ("Object retained. Reference count is now {}", oldCount + 1);
+//            
+//            return this;
+//        }
     
       /**
        * Decreases the reference count by {@code 1} and calls {@link #destroy} if the reference count reaches
@@ -148,13 +128,14 @@ abstract class ReferenceCountedObject implements AutoCloseable {
        *
        * @return {@code true} if the reference count became {@code 0} and this object was destroyed
        */
-      public final boolean 
+//      public final boolean 
+      private boolean 
     release() {
         
             long newCount = REFERENCE_COUNT_UPDATER.decrementAndGet (this);
         
-            if (resourceReference != null)
-                resourceReference.trace ("Object released. Reference count is now {}.", newCount);
+//            if (resourceReference != null)
+//                resourceReference.trace ("Object released. Reference count is now {}.", newCount);
             
             if (newCount == 0) 
             {
@@ -179,27 +160,36 @@ abstract class ReferenceCountedObject implements AutoCloseable {
                 
                 return true;
             }
-            else if (!idempotentClose && newCount <= -1) 
-            {
-                throw new AssertionError ("Tried to release a destroyed object"
-                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
-            }
+//            else if (!idempotentClose && newCount <= -1) 
+//            {
+//                throw new AssertionError ("Tried to release a destroyed object"
+//                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
+//            }
             else
                 return false;
         }
 
-      /** 
-       * {@code close} simply calls {@link #release release}.
-       * The intent is to allow patterns such as:
-       * <pre>
-       * try (new MyReferenceCountedObject())
-       * { ... }
+//      /** 
+//       * {@code close} simply calls {@link #release release}.
+//       * The intent is to allow patterns such as:
+//       * <pre>
+//       * try (new MyReferenceCountedObject())
+//       * { ... }
+//       * 
+//       * try (refCountedObject.retain())
+//       * { ... }
+//       * 
+//       * {@literal @}lombok.Cleanup var a = new MyReferenceCountedObject();
+//       * </pre>
+//       */
+      /**
+       * Closes this resource, relinquishing any underlying resources.
+       * This method is invoked automatically on objects managed by the
+       * {@code try}-with-resources statement.
        * 
-       * try (refCountedObject.retain())
-       * { ... }
-       * 
-       * {@literal @}lombok.Cleanup var a = new MyReferenceCountedObject();
-       * </pre>
+       * <p> This method is idempotent. In other words,
+       * calling this {@code close} method more than once will not have an effect.
+       * The first time this method is called, the object will be destroyed.
        */
       public final @Override void
     close() {
