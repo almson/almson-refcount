@@ -203,12 +203,16 @@ public class ResourceLeakDetector {
                 return null;
         }
 
-      /** Detect and log leaks. */
+      /** 
+       * Check if any tracked objects have been collected by the GC without having been destroyed.
+       * Any detected leaks will be logged.
+       */
       public void 
     pollAndLogLeaks() {
 
-            ResourceReference ref;
-            while ((ref = (ResourceReference) referenceQueue.poll()) != null) 
+            for (ResourceReference ref = (ResourceReference) referenceQueue.poll()
+                    ; ref != null
+                    ; ref = (ResourceReference) referenceQueue.poll()) 
             {
                 if (!ref.close())
                     continue;
@@ -217,18 +221,52 @@ public class ResourceLeakDetector {
             }
         }
     
-      protected void
+      /**
+       * Throws AssertionError if there's been any leaks.
+       * The current thread should have already been synchronized with any other threads that were responsible for 
+       * releasing tracked objects. Any tracked object which has not been destroyed (whether or not it is reachable 
+       * or has been collected by the GC) will be considered a leak.
+       */
+      public void
+    assertAllResourcesDestroyed() {
+        
+            // asserting this is undersirable if this method is used in production code
+//            assert level.ordinal() >= Level.FULL.ordinal() : "Enable a leak detection level of FULL or DEBUG";
+            
+            // All unlogged leaks, whether they've already been queued by the GC or not, will be here.
+            synchronized (refListHead)
+            {
+                for (ResourceReference ref : refListHead)
+                {
+                    ref.close();
+                    logLeak (ref);
+                }
+            }
+            
+            if (!loggedLeaks.isEmpty())
+            {
+                StringBuilder sb = new StringBuilder ();
+                for (String loggedLeak : loggedLeaks)
+                    sb.append (loggedLeak).append ("\n");
+                throw new AssertionError (sb);
+            }
+        }
+    
+      // Instead of having this as a protected method expecting the whole class to be overriden, 
+      // we should have a consumer lambda, and allow setting a different lambda.
+      // and make everything else static
+      private void
     logLeak (ResourceReference ref) {
         
             if (!log.isErrorEnabled())
                 return;
         
             String leakWarning = getLeakWarning(ref);
-            if (loggedLeaks.add (leakWarning))
+            if (loggedLeaks.add (leakWarning)) // Only log unique leak warnings
                 log.error (leakWarning);
         }
 
-      protected String 
+      private String 
     getLeakWarning(ResourceReference ref) {
         
             if (level == Level.DEBUG)
@@ -241,7 +279,7 @@ public class ResourceLeakDetector {
                         + (traceCount >= 2 ? System.lineSeparator() + "\tTo trace the lifetime of the object more thoroughly, make more frequent calls to trace()." : "");
             }
             else
-                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected."
+                return "RESOURCE LEAK DETECTED: Object of type " + ref.getReferentClassName() + " was not destroyed prior to becoming unreachable and garbage collected. "
                         + "The log level is " + level + ", which does not record stack traces. "
 //                        + "To enable debugging, specify the JVM option '-D"+PROP_LEVEL+"="+Level.DEBUG.name().toLowerCase()+"' or call ResourceLeakDetector.setLevel().";
                         + "To enable debugging, specify the JVM option -D"+PROP_LEVEL+"="+Level.DEBUG;

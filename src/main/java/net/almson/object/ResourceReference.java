@@ -19,13 +19,14 @@ package net.almson.object;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.slf4j.helpers.MessageFormatter;
 
-final class ResourceReference extends WeakReference<Object> {
+final class ResourceReference extends WeakReference<Object> implements Iterable<ResourceReference> {
 
       private static final AtomicReferenceFieldUpdater<ResourceReference, Trace> 
     TRACELISTHEAD_UPDATER = AtomicReferenceFieldUpdater.newUpdater(ResourceReference.class, Trace.class, "traceListHead");
@@ -121,6 +122,30 @@ final class ResourceReference extends WeakReference<Object> {
                 }
                 return false;
             }
+        }
+    
+      public @Override Iterator<ResourceReference>
+    iterator() {
+        
+            assert Thread.holdsLock (refListHead);
+        
+            return new Iterator<ResourceReference>() 
+                {
+                    ResourceReference cur = refListHead;
+                    
+                      public @Override boolean
+                    hasNext() {
+                        
+                            return cur.next != cur;
+                        }
+
+                      public @Override ResourceReference
+                    next() {
+                        
+                            cur = cur.next;
+                            return cur;
+                        }
+                };
         }
 
       public boolean 

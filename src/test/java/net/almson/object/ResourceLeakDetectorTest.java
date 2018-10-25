@@ -23,17 +23,12 @@ import java.util.Queue;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import org.joor.Reflect;
 import org.junit.Assert;
 
 public class ResourceLeakDetectorTest {
 
     @Test(timeout = 60000)
     public void testConcurrentUsage() throws Throwable {
-        
-        TestResourceLeakDetector detector = new TestResourceLeakDetector();
-        // Hack to modify the LeakDetector. I'm still grappling with whether it should be publically modifiable.
-        Reflect.on (ReferenceCountedObject.class).set ("LEAK_DETECTOR", detector);
         
         final AtomicBoolean finished = new AtomicBoolean();
         final AtomicReference<Object> error = new AtomicReference<>();
@@ -96,34 +91,9 @@ public class ResourceLeakDetectorTest {
             t.join();
         }
 
-        // Check if we had any leak reports in the ResourceLeakDetector itself
-        detector.assertNoErrors();
+        ReferenceCountedObject.LEAK_DETECTOR.assertAllResourcesDestroyed();
 
         if (error.get() != null)
             Assert.fail (error.get().toString());
-    }
-
-    private static final class TestResourceLeakDetector extends ResourceLeakDetector {
-        
-//        TestResourceLeakDetector() { super (Level.FULL, 1, 0); }
-//        TestResourceLeakDetector() { super (Level.DEBUG, 1, 1); }
-//        TestResourceLeakDetector() { super (Level.DEBUG, 1, 2); }
-        TestResourceLeakDetector() { super (Level.DEBUG, 1, 10); }
-
-        private final AtomicReference<String> error = new AtomicReference<>();
-
-        @Override
-        protected void logLeak (ResourceReference ref) {
-            reportError(super.getLeakWarning(ref));
-        }
-
-        private void reportError(String cause) {
-            error.compareAndSet(null, cause);
-        }
-
-        void assertNoErrors() throws Throwable {
-            if (error.get() != null)
-                Assert.fail (error.get());
-        }
     }
 }
