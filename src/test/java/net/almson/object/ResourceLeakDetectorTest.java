@@ -23,13 +23,40 @@ import java.util.Queue;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.junit.Assert;
 
 public class ResourceLeakDetectorTest {
 
     @Test(timeout = 60000)
-    public void testConcurrentUsage() throws Throwable {
+    public void testConcurrentUsage() throws InterruptedException {
+        testConcurrentUsage(() -> new ReferenceCountedObject() { @Override protected void destroy() { }});
+    }
+    
+    @Test
+    public void testThrowException() throws InterruptedException {
+        CloseableObject o = new CloseableObject() { @Override protected void destroy() {
+            throw new RuntimeException();
+        }};
         
+        try {
+            o.close();
+        }
+        catch (RuntimeException e) {
+            ;
+        }
+        
+        CloseableObject.LEAK_DETECTOR.assertAllResourcesDestroyed();
+    }
+    
+    @Test(timeout = 60000)
+    public void testThrowException2() throws InterruptedException {
+        testConcurrentUsage(() -> new ReferenceCountedObject() { @Override protected void destroy() {
+            throw new RuntimeException();
+        }});
+    }
+    
+    public void testConcurrentUsage(Supplier<ReferenceCountedObject> objSupplier) throws InterruptedException {
         final AtomicBoolean finished = new AtomicBoolean();
         final AtomicReference<Object> error = new AtomicReference<>();
         // With 50 threads issue #6087 is reproducible on every run.
@@ -49,7 +76,7 @@ public class ResourceLeakDetectorTest {
 
                             // Allocate 100 LeakAwareResource per run and close them after it.
                             for (int a = 0; a < 100; a++) {
-                                ReferenceCountedObject leakAwareResource = new ReferenceCountedObject() { @Override protected void destroy() { }};
+                                ReferenceCountedObject leakAwareResource = objSupplier.get();
                                 leakAwareResource.trace ("We're adding it to 'resources'");
                                 resources.add(leakAwareResource);
                             }
@@ -58,7 +85,7 @@ public class ResourceLeakDetectorTest {
                             }
                         }
                     } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        return;
                     } catch (Throwable e) {
                         error.compareAndSet(null, e);
                     } finally {
@@ -74,10 +101,14 @@ public class ResourceLeakDetectorTest {
                             return false;
                         }
                         r.trace ("We just retrieved it from 'resources'");
-                        boolean closed = r.release();
-                        if (checkClosed && !closed) {
-                            error.compareAndSet(null, "ResourceLeak.close() returned 'false' but expected 'true'");
-                            return true;
+                        try {
+                            boolean closed = r.release();
+                            if (checkClosed && !closed) {
+                                error.compareAndSet(null, "ResourceLeak.close() returned 'false' but expected 'true'");
+                                return true;
+                            }
+                        }
+                        catch(RuntimeException e) {
                         }
                     }
                 }

@@ -139,24 +139,34 @@ abstract class CloseableObject implements AutoCloseable {
             
             if (newCount == 0) 
             {
-                destroy();
-
-                if (resourceReference != null)
-                    // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
-                    // see: https://stackoverflow.com/questions/26642153/finalize-called-on-strongly-reachable-object-in-java-8
-                    // The test ResourceLeakDetectorTest.testConcurrentUsage reproduces this issue on JDK 8
+                try {
+                    destroy();
+                }
+                finally {
+                    if (resourceReference != null) {
+                        // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
+                        // see: https://stackoverflow.com/questions/26642153/finalize-called-on-strongly-reachable-object-in-java-8
+                        // The test ResourceLeakDetectorTest.testConcurrentUsage reproduces this issue on JDK 8
                     // if no counter-measures are taken.
                     // The method Reference.reachabilityFence offers a solution to this problem.
                     // However, besides only being available in Java 9+,
                     // it "is designed for use in uncommon situations of premature finalization where using
                     // synchronized blocks or methods [is] not possible or do not provide the desired control."
-                    // Because we just destroyed the object,
-                    // it is unreasonable that anyone else, anywhere, is hold a lock.
-                    // Therefore, it seems using a synchronization block is possible here, so we will use one!
-                    synchronized (this)
-                    {
-                        resourceReference.close();
+                        // Because we just destroyed the object,
+                        // it is unreasonable that anyone else, anywhere, is hold a lock.
+                        // Therefore, it seems using a synchronization block is possible here, so we will use one!
+                        
+                        // Java 9:
+//                        resourceReference.close();
+//                        java.lang.ref.Reference.reachabilityFence(this);
+
+                        // Java 8:
+                        synchronized (this)
+                        {
+                            resourceReference.close();
+                        }
                     }
+                }
                 
                 return true;
             }
