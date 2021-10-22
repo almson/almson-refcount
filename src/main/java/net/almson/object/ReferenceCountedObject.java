@@ -52,9 +52,9 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
   public
 abstract class ReferenceCountedObject implements AutoCloseable {
       
-      public static final ResourceLeakDetector
+      private static final ResourceLeakDetector
 //    LEAK_DETECTOR = ResourceLeakDetectorFactory.instance().newResourceLeakDetector();
-    LEAK_DETECTOR = ResourceLeakDetector.newResourceLeakDetector();
+    LEAK_DETECTOR = ResourceLeakDetector.INSTANCE;
 
       private static final AtomicLongFieldUpdater<ReferenceCountedObject> 
     REFERENCE_COUNT_UPDATER = AtomicLongFieldUpdater.newUpdater (ReferenceCountedObject.class, "referenceCount");

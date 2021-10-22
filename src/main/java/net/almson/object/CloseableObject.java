@@ -30,9 +30,9 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
   public
 abstract class CloseableObject implements AutoCloseable {
       
-      public static final ResourceLeakDetector
+      private static final ResourceLeakDetector
 //    LEAK_DETECTOR = ResourceLeakDetectorFactory.instance().newResourceLeakDetector();
-    LEAK_DETECTOR = ResourceLeakDetector.newResourceLeakDetector();
+    LEAK_DETECTOR = ResourceLeakDetector.INSTANCE;
 
       private static final AtomicIntegerFieldUpdater<CloseableObject> 
     REFERENCE_COUNT_UPDATER = AtomicIntegerFieldUpdater.newUpdater (CloseableObject.class, "referenceCount");

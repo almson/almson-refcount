@@ -46,7 +46,7 @@ public class ResourceLeakDetectorTest {
             ;
         }
         
-        CloseableObject.LEAK_DETECTOR.assertAllResourcesDestroyed();
+        ResourceLeakDetector.INSTANCE.assertAllResourcesDestroyed();
     }
     
     @Test(timeout = 60000)
@@ -122,7 +122,7 @@ public class ResourceLeakDetectorTest {
             t.join();
         }
 
-        ReferenceCountedObject.LEAK_DETECTOR.assertAllResourcesDestroyed();
+        ResourceLeakDetector.INSTANCE.assertAllResourcesDestroyed();
 
         if (error.get() != null)
             Assert.fail (error.get().toString());

@@ -27,6 +27,8 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @lombok.extern.slf4j.Slf4j
 public class ResourceLeakDetector {
+    
+    public static final ResourceLeakDetector INSTANCE = newResourceLeakDetector();
 
     static final String PROP_LEVEL = "leakDetection.level";
     static final String PROP_SAMPLING_INTERVAL = "leakDetection.samplingInterval";
@@ -93,7 +95,7 @@ public class ResourceLeakDetector {
         }
     }
 
-      static ResourceLeakDetector
+      private static ResourceLeakDetector
     newResourceLeakDetector() {
         
             String levelStr = System.getProperty (PROP_LEVEL, DEFAULT_LEVEL.name());
@@ -134,7 +136,7 @@ public class ResourceLeakDetector {
             return new ResourceLeakDetector (level, samplingInterval, traceCount);
         }
     
-    
+      private
     ResourceLeakDetector (Level level, int samplingInterval, int traceCount) {
             
             this.level = level;
