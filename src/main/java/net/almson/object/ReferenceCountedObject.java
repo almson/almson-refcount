@@ -16,6 +16,7 @@
 package net.almson.object;
 
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import org.slf4j.helpers.MessageFormatter;
 
   /**
    * The base class for reference counted objects.
@@ -39,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
    * <p> There is no finalization mechanism which tries to call {@code destroy} in case you forget to call release! 
    * Finalization presents big challenges, including concurrency issues and even premature finalization, 
    * especially in the general case. 
-   * (If you insist on having finalizers, you may still use them or the higher-performance {@link java.lang.ref.Cleaner}.)
+   * (If you insist on having finalizers, you may still use them or the higher-performance {@code java.lang.ref.Cleaner}.)
    * 
    * <p> Instead, a facility for detecting memory leaks is provided in the form of {@link ResourceLeakDetector}. 
    * It uses a similar mechanism to finalization, however because of its narrow scope it works correctly.
@@ -145,6 +146,10 @@ abstract class ReferenceCountedObject implements AutoCloseable {
       /**
        * Decreases the reference count by {@code 1} and calls {@link #destroy} if the reference count reaches
        * {@code 0}.
+       * 
+       * @implNote Although this would most likely be a logic error anyway,
+       * deadlock may occur if another thread has synchronized on this object
+       * because this method calls {@code synchronized(this)} to avoid.
        *
        * @return {@code true} if the reference count became {@code 0} and this object was destroyed
        */
@@ -166,11 +171,11 @@ abstract class ReferenceCountedObject implements AutoCloseable {
                         // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
                         // see: https://stackoverflow.com/questions/26642153/finalize-called-on-strongly-reachable-object-in-java-8
                         // The test ResourceLeakDetectorTest.testConcurrentUsage reproduces this issue on JDK 8
-                    // if no counter-measures are taken.
-                    // The method Reference.reachabilityFence offers a solution to this problem.
-                    // However, besides only being available in Java 9+,
-                    // it "is designed for use in uncommon situations of premature finalization where using
-                    // synchronized blocks or methods [is] not possible or do not provide the desired control."
+                        // if no counter-measures are taken.
+                        // The method Reference.reachabilityFence offers a solution to this problem.
+                        // However, besides only being available in Java 9+,
+                        // it "is designed for use in uncommon situations of premature finalization where using
+                        // synchronized blocks or methods [is] not possible or do not provide the desired control."
                         // Because we just destroyed the object,
                         // it is unreasonable that anyone else, anywhere, is hold a lock.
                         // Therefore, it seems using a synchronization block is possible here, so we will use one!
@@ -221,6 +226,7 @@ abstract class ReferenceCountedObject implements AutoCloseable {
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
+       * @see ResourceReference#trace(Object) 
        */
       public final void 
     trace() {
@@ -232,37 +238,47 @@ abstract class ReferenceCountedObject implements AutoCloseable {
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param arg argument to be substituted in place of the formatting anchor
+       * @see ResourceReference#trace(Object) 
        */
       public final void
-    trace (String format, Object param1) {
+    trace (String format, Object arg) {
         
             assertNotDestroyed();
         
             if (resourceReference != null)
-                resourceReference.trace (format, param1);
+                resourceReference.trace (format, arg);
         }
     
       /**
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param arg1 argument to be substituted in place of the first formatting anchor
+       * @param arg2 argument to be substituted in place of the second formatting anchor
+       * @see ResourceReference#trace(Object) 
        */
       public final void
-    trace (String format, Object param1, Object param2) {
+    trace (String format, Object arg1, Object arg2) {
         
             assertNotDestroyed();
         
             if (resourceReference != null)
-                resourceReference.trace (format, param1, param2);
+                resourceReference.trace (format, arg1, arg2);
         }
     
       /**
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param argArray arguments to be substituted in place of anchors
+       * @see ResourceReference#trace(Object) 
        */
       public final void
     trace (String format, Object... argArray) {
@@ -280,6 +296,7 @@ abstract class ReferenceCountedObject implements AutoCloseable {
        * This method attempts to have minimal performance impact.
        * @param message a string or object whose {@code toString} method will be called 
        *                 only in the case that a leak is logged and stack traces are enabled
+       * @see ResourceReference#trace(Object) 
        */
       public final void
     trace (Object message) {
@@ -291,8 +308,9 @@ abstract class ReferenceCountedObject implements AutoCloseable {
         }
     
       /**
-       * May be used to assert that the object hasn't been accidentally destroyed.
+       * May be used to assert that the object hasn't been destroyed.
        * In case of concurrency, this method cannot guarantee that the object has not been destroyed.
+       * If you need to be sure, implement synchronization in your class and use a flag.
        */
       protected final void
     assertNotDestroyed() {

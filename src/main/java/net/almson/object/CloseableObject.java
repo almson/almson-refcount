@@ -16,6 +16,7 @@
 package net.almson.object;
 
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import org.slf4j.helpers.MessageFormatter;
 
   /**
    * A base class for closeable objects with support for leak detection but not reference counting.
@@ -94,28 +95,28 @@ abstract class CloseableObject implements AutoCloseable {
             try {
                 destroy();
             }
-                finally {
-                    if (resourceReference != null) {
-                        // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
-                        // see: https://stackoverflow.com/questions/26642153/finalize-called-on-strongly-reachable-object-in-java-8
-                        // The test ResourceLeakDetectorTest.testConcurrentUsage reproduces this issue on JDK 8
+            finally {
+                if (resourceReference != null) {
+                    // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
+                    // see: https://stackoverflow.com/questions/26642153/finalize-called-on-strongly-reachable-object-in-java-8
+                    // The test ResourceLeakDetectorTest.testConcurrentUsage reproduces this issue on JDK 8
                     // if no counter-measures are taken.
                     // The method Reference.reachabilityFence offers a solution to this problem.
                     // However, besides only being available in Java 9+,
                     // it "is designed for use in uncommon situations of premature finalization where using
                     // synchronized blocks or methods [is] not possible or do not provide the desired control."
-                        // Because we just destroyed the object,
-                        // it is unreasonable that anyone else, anywhere, is hold a lock.
-                        // Therefore, it seems using a synchronization block is possible here, so we will use one!
-                        
-                        // Java 9:
+                    // Because we just destroyed the object,
+                    // it is unreasonable that anyone else, anywhere, is hold a lock.
+                    // Therefore, it seems using a synchronization block is possible here, so we will use one!
+
+                    // Java 9:
 //                        resourceReference.close();
 //                        java.lang.ref.Reference.reachabilityFence(this);
 
-                        // Java 8:
-                        synchronized (this)
-                        {
-                            resourceReference.close();
+                    // Java 8:
+                    synchronized (this)
+                    {
+                        resourceReference.close();
                     }
                 }
             }
@@ -136,37 +137,47 @@ abstract class CloseableObject implements AutoCloseable {
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param arg argument to be substituted in place of the formatting anchor
+       * @see ResourceReference#trace(Object) 
        */
       public final void
-    trace (String format, Object param1) {
+    trace (String format, Object arg) {
         
             assertNotDestroyed();
         
             if (resourceReference != null)
-                resourceReference.trace (format, param1);
+                resourceReference.trace (format, arg);
         }
     
       /**
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param arg1 argument to be substituted in place of the first formatting anchor
+       * @param arg2 argument to be substituted in place of the second formatting anchor
+       * @see ResourceReference#trace(Object) 
        */
       public final void
-    trace (String format, Object param1, Object param2) {
+    trace (String format, Object arg1, Object arg2) {
         
             assertNotDestroyed();
         
             if (resourceReference != null)
-                resourceReference.trace (format, param1, param2);
+                resourceReference.trace (format, arg1, arg2);
         }
     
       /**
        * Records the stack trace for debugging purposes in case this object is detected to have leaked.
        * You must set the {@link ResourceLeakDetector.Level resource leak detector level} 
        * to {@link ResourceLeakDetector.Level#DEBUG DEBUG}.
-       * This method follows the SLF4J API.
+       * This method follows the {@link MessageFormatter SLF4J API}.
+       * @param format message pattern which will be parsed and formatted
+       * @param argArray arguments to be substituted in place of anchors
+       * @see ResourceReference#trace(Object) 
        */
       public final void
     trace (String format, Object... argArray) {
@@ -184,6 +195,7 @@ abstract class CloseableObject implements AutoCloseable {
        * This method attempts to have minimal performance impact.
        * @param message a string or object whose {@code toString} method will be called 
        *                 only in the case that a leak is logged and stack traces are enabled
+       * @see ResourceReference#trace(Object) 
        */
       public final void
     trace (Object message) {
@@ -195,8 +207,9 @@ abstract class CloseableObject implements AutoCloseable {
         }
     
       /**
-       * May be used to assert that the object hasn't been accidentally destroyed.
+       * May be used to assert that the object hasn't been destroyed.
        * In case of concurrency, this method cannot guarantee that the object has not been destroyed.
+       * If you need to be sure, implement synchronization in your class and use a flag.
        */
       protected final void
     assertNotDestroyed() {

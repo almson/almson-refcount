@@ -73,7 +73,13 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <doclint>none</doclint>
+                            <tags>
+                                <tag>
+                                    <name>implNote</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Note:</head>
+                                </tag>
+                            </tags>
                         </configuration>
                     </execution>
                 </executions>

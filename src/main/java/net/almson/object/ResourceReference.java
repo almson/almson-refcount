@@ -26,6 +26,11 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import org.slf4j.helpers.MessageFormatter;
 
+/**
+ * Used by ResourceLeakDetector to track leaks.
+ * 
+ * @author Aleksandr Dubinsky
+ */
 final class ResourceReference extends WeakReference<Object> implements Iterable<ResourceReference> {
 
       private static final AtomicReferenceFieldUpdater<ResourceReference, Trace> 
