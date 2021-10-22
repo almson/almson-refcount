@@ -52,10 +52,6 @@ import org.slf4j.helpers.MessageFormatter;
    */
   public
 abstract class ReferenceCountedObject implements AutoCloseable {
-      
-      private static final ResourceLeakDetector
-//    LEAK_DETECTOR = ResourceLeakDetectorFactory.instance().newResourceLeakDetector();
-    LEAK_DETECTOR = ResourceLeakDetector.INSTANCE;
 
       private static final AtomicLongFieldUpdater<ReferenceCountedObject> 
     REFERENCE_COUNT_UPDATER = AtomicLongFieldUpdater.newUpdater (ReferenceCountedObject.class, "referenceCount");
@@ -89,7 +85,7 @@ abstract class ReferenceCountedObject implements AutoCloseable {
     idempotentClose;
     
       private final ResourceReference 
-    resourceReference = LEAK_DETECTOR.tryRegister (this);
+    resourceReference = ResourceLeakDetector.getInstance().tryRegister (this);
       
       
       /**

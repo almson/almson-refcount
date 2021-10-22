@@ -25,7 +25,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.junit.Assert;
+import org.junit.FixMethodOrder;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ResourceLeakDetectorTest {
 
     @Test(timeout = 60000)
@@ -35,18 +38,24 @@ public class ResourceLeakDetectorTest {
     
     @Test
     public void testThrowException() throws InterruptedException {
-        CloseableObject o = new CloseableObject() { @Override protected void destroy() {
-            throw new RuntimeException();
-        }};
-        
-        try {
-            o.close();
-        }
-        catch (RuntimeException e) {
-            ;
-        }
-        
-        ResourceLeakDetector.INSTANCE.assertAllResourcesDestroyed();
+        ResourceLeakDetector leakDetector = ResourceLeakDetector.newResourceLeakDetector(1, 0);
+        Thread thread = new Thread(() -> {
+            ResourceLeakDetector.setInheritableThreadLocalInstance(leakDetector);
+
+            CloseableObject o = new CloseableObject() { @Override protected void destroy() {
+                throw new RuntimeException();
+            }};
+
+            try {
+                o.close();
+            }
+            catch (RuntimeException e) {
+                ;
+            }
+        });
+        thread.start();
+        thread.join();
+        leakDetector.assertAllResourcesDestroyed();
     }
     
     @Test(timeout = 60000)
@@ -122,9 +131,30 @@ public class ResourceLeakDetectorTest {
             t.join();
         }
 
-        ResourceLeakDetector.INSTANCE.assertAllResourcesDestroyed();
+        ResourceLeakDetector.DEFAULT_INSTANCE.assertAllResourcesDestroyed();
 
         if (error.get() != null)
             Assert.fail (error.get().toString());
+    }
+    
+    @Test
+    public void testDisabledLeakDetector() throws InterruptedException {
+        try {
+            ResourceLeakDetector leakDetector = ResourceLeakDetector.DISABLED_INSTANCE;
+            ResourceLeakDetector.setInheritableThreadLocalInstance(leakDetector);
+
+            CloseableObject o = new CloseableObject() { @Override protected void destroy() { }};
+
+            leakDetector.assertAllResourcesDestroyed();
+        }
+        finally {
+            ResourceLeakDetector.setInheritableThreadLocalInstance(ResourceLeakDetector.DEFAULT_INSTANCE);
+        }
+    }
+    
+    @Test(expected = AssertionError.class)
+    public void testLeak() throws InterruptedException {
+        CloseableObject o = new CloseableObject() { @Override protected void destroy() { }};
+        ResourceLeakDetector.DEFAULT_INSTANCE.assertAllResourcesDestroyed();
     }
 }

@@ -24,12 +24,13 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Detects leaks of instances of classes {@link ReferenceCountedObject} and {@link CloseableObject}.
  * Set the {@link Level leak detection level} using the Java system property {@code -DleakDetection.level}.
+ * <p>For unit testing, you can use {@link #setInheritableThreadLocalInstance(ResourceLeakDetector)}.
+ * Be careful of conflicts such as one test disabling leak detection for the thread
+ * and forgetting to restore it.
  */
 @lombok.extern.slf4j.Slf4j
-public class ResourceLeakDetector {
+public final class ResourceLeakDetector {
     
-    public static final ResourceLeakDetector INSTANCE = newResourceLeakDetector();
-
     static final String PROP_LEVEL = "leakDetection.level";
     static final String PROP_SAMPLING_INTERVAL = "leakDetection.samplingInterval";
     static final String PROP_TRACE_COUNT = "leakDetection.traceCount";
@@ -37,6 +38,22 @@ public class ResourceLeakDetector {
     static final Level DEFAULT_LEVEL = Level.FULL;
     static final int DEFAULT_LIGHT_SAMPLING_INTERVAL = 128;
     static final int DEFAULT_TRACE_COUNT = 4;
+
+    /** 
+     * The default resource leak detector used by all threads unless 
+     * {@link #setInheritableThreadLocalInstance(ResourceLeakDetector) overriden}.
+     */
+    public static final ResourceLeakDetector DEFAULT_INSTANCE = newResourceLeakDetector();
+    private static final InheritableThreadLocal<ResourceLeakDetector> LOCAL_INSTANCE 
+            = new InheritableThreadLocal<>();
+    
+    /** 
+     * A disabled resource leak detector.
+     * For use with {@link #setInheritableThreadLocalInstance(ResourceLeakDetector)}.
+     */
+    public static final ResourceLeakDetector DISABLED_INSTANCE 
+            = newResourceLeakDetector(0, 0);
+
 
     /**
      * Represents the level of resource leak detection.
@@ -94,6 +111,24 @@ public class ResourceLeakDetector {
                     + ". Acceptable values are DISABLED, LIGHT, FULL, DEBUG, or number 0-3.");
         }
     }
+    
+    /**
+     * Sets the ResourceLeakDetector used by this and all child threads.
+     * 
+     * @param instance an instance created with {@link #newResourceLeakDetector(int,int)},
+     *          {@link #DISABLED_INSTANCE}, or {@link #DEFAULT_INSTANCE}.
+     */
+    public static void setInheritableThreadLocalInstance(ResourceLeakDetector instance) {
+        LOCAL_INSTANCE.set(instance);
+    }
+        
+    static ResourceLeakDetector getInstance() {
+        ResourceLeakDetector localInstance = LOCAL_INSTANCE.get();
+        if (localInstance != null)
+            return localInstance;
+        else
+            return DEFAULT_INSTANCE;
+    }
 
       private static ResourceLeakDetector
     newResourceLeakDetector() {
@@ -136,6 +171,41 @@ public class ResourceLeakDetector {
             return new ResourceLeakDetector (level, samplingInterval, traceCount);
         }
     
+      /**
+       * Creates a new ResourceLeakDetector for use with 
+       * {@link #setInheritableThreadLocalInstance }.
+       * If {@code samplingInterval} is 0, leak detection is disabled.
+       * If {@code traceCount} is 1 or greater, leak detection is performed 
+       * as in {@link Level#DEBUG DEBUG} mode. Otherwise, leak detection is performed 
+       * as in {@link Level#FULL FULL} or {@link Level#LIGHT LIGHT} modes.
+       * 
+       * @param samplingInterval 
+       *    Every Nth allocated resource is registered with the leak detector.
+       *    Set to 1 to register every resource. Set to 0 to disable leak detection.
+       * @param traceCount
+       *    Number of stack traces to record.
+       *    Set to 0 to disable stack trace recording (for best performance).
+       *    Set to 1 to record the allocation stack trace.
+       *    Set to 2 or greater and call {@code trace} to record additional stack trace
+       *    when the object is used.
+       * @return a new {@code ResourceLeakDetector} instance
+       * @see Level#DEBUG
+       * @see ReferenceCountedObject#trace()
+       */
+      public static ResourceLeakDetector
+    newResourceLeakDetector(int samplingInterval, int traceCount) {
+
+            Level level;
+            if (samplingInterval <= 0)
+                level = Level.DISABLED;
+            else if (traceCount > 0)
+                level = Level.DEBUG;
+            else
+                level = Level.FULL;
+            
+            return new ResourceLeakDetector (level, samplingInterval, traceCount);
+        }
+    
       private
     ResourceLeakDetector (Level level, int samplingInterval, int traceCount) {
             
@@ -160,29 +230,6 @@ public class ResourceLeakDetector {
     private final ResourceReference refListHead = new ResourceReference();
     private final ReferenceQueue<Object> referenceQueue = new ReferenceQueue<>();
     private final Set<String> loggedLeaks = ConcurrentHashMap.newKeySet();
-    
-    // Note sure if these should be exposed. They're pretty happy being final.
-//      public void
-//    setLevel (Level level) { LEVEL = level; }
-//    
-//      public void
-//    setSamplingInterval (int samplingInterval) { SAMPLING_INTERVAL = samplingInterval; }
-//    
-//      public void
-//    setTraceCount (int traceCount) { TRACE_COUNT = traceCount; }
-//
-//      public void 
-//    suppressStackTraceEntries (Class clz, String ... methodNames) {
-//        
-//            Set<String> missingMethods = new HashSet<> (Arrays.asList (methodNames));
-//            for (Method method : clz.getDeclaredMethods()) 
-//                missingMethods.remove (method.getName());
-//            if (! missingMethods.isEmpty())
-//                throw new IllegalArgumentException("Can't find '" + missingMethods + "' in " + clz.getName());
-//
-//            for (String methodName : methodNames)
-//                suppressedStackTraceEntries.add(clz.getName() + "." + methodName);
-//        }
 
       /**
        * Creates a new {@link ResourceReference} which is expected to be 

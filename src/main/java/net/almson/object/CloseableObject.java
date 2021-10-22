@@ -31,10 +31,6 @@ import org.slf4j.helpers.MessageFormatter;
   public
 abstract class CloseableObject implements AutoCloseable {
       
-      private static final ResourceLeakDetector
-//    LEAK_DETECTOR = ResourceLeakDetectorFactory.instance().newResourceLeakDetector();
-    LEAK_DETECTOR = ResourceLeakDetector.INSTANCE;
-
       private static final AtomicIntegerFieldUpdater<CloseableObject> 
     REFERENCE_COUNT_UPDATER = AtomicIntegerFieldUpdater.newUpdater (CloseableObject.class, "referenceCount");
       
@@ -43,7 +39,7 @@ abstract class CloseableObject implements AutoCloseable {
     referenceCount = 1;
     
       private final ResourceReference 
-    resourceReference = LEAK_DETECTOR.tryRegister (this);
+    resourceReference = ResourceLeakDetector.getInstance().tryRegister (this);
       
       
       /**
