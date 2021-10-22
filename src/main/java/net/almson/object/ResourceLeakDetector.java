@@ -258,9 +258,6 @@ public class ResourceLeakDetector {
       private void
     logLeak (ResourceReference ref) {
         
-            if (!log.isErrorEnabled())
-                return;
-        
             String leakWarning = getLeakWarning(ref);
             if (loggedLeaks.add (leakWarning)) // Only log unique leak warnings
                 log.error (leakWarning);
