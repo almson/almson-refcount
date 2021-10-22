@@ -248,6 +248,7 @@ public class ResourceLeakDetector {
                 StringBuilder sb = new StringBuilder ();
                 for (String loggedLeak : loggedLeaks)
                     sb.append (loggedLeak).append ("\n");
+                loggedLeaks.clear();
                 throw new AssertionError (sb);
             }
         }
