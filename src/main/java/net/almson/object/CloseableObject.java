@@ -37,35 +37,9 @@ abstract class CloseableObject implements AutoCloseable {
       private static final AtomicIntegerFieldUpdater<CloseableObject> 
     REFERENCE_COUNT_UPDATER = AtomicIntegerFieldUpdater.newUpdater (CloseableObject.class, "referenceCount");
       
-//      /**
-//       * Equivalent to calling {@link #ReferenceCountedObject(boolean) this(boolean)} with a value of {@code false}.
-//       */
-//      protected
-//    CloseableObject() { this (false); }
-//    
-//      /**
-//       * @param idempotentClose if {@code true}, do not throw an exception if {@code close} or {@code release} 
-//       *        is called more often than necessary, ie if the reference count becomes negative.
-//       *        This is the encouraged behavior of {@link java.lang.AutoCloseable#close()}, 
-//       *        although the contract of that method explicitly states that idempotency is not required.
-//       *        Nevertheless, passing {@code false} may help detect bugs.
-//       *        Logic which will not {@code release} a destroyed object is more likely to be correct overall,
-//       *        particularly if the object may be shared.
-//       */
-//      protected
-//    CloseableObject (boolean idempotentClose) {
-//        
-//            this.idempotentClose = idempotentClose;
-//        }
-      
     
       private volatile int
     referenceCount = 1;
-      
-    // idempotentClose is assumed to always be true
-    // see javadoc of ReferenceCountedObject(boolean) constructor
-//      private final boolean
-//    idempotentClose;
     
       private final ResourceReference 
     resourceReference = LEAK_DETECTOR.tryRegister (this);
@@ -97,51 +71,29 @@ abstract class CloseableObject implements AutoCloseable {
       protected abstract void 
     destroy();
 
-
-//      /**
-//       * Increments the reference count by {@code 1}.
-//       * 
-//       * @return this object
-//       */
-//      public final CloseableObject 
-//    retain() {
-//        
-//            long oldCount = REFERENCE_COUNT_UPDATER.getAndIncrement (this);
-//            
-//            if (oldCount <= 0)
-//            {
-//                REFERENCE_COUNT_UPDATER.getAndDecrement (this); // not exactly safe, but better than nothing
-//                
-//                throw new AssertionError ("Resurrected a destroyed object" 
-//                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
-//            }
-//            
-//            if (resourceReference != null)
-//                resourceReference.trace ("Object retained. Reference count is now {}", oldCount + 1);
-//            
-//            return this;
-//        }
     
       /**
-       * Decreases the reference count by {@code 1} and calls {@link #destroy} if the reference count reaches
-       * {@code 0}.
-       *
-       * @return {@code true} if the reference count became {@code 0} and this object was destroyed
+       * Closes this resource, relinquishing any underlying resources.
+       * This method is invoked automatically on objects managed by the
+       * {@code try}-with-resources statement.
+       * 
+       * <p> This method is idempotent. In other words,
+       * calling this {@code close} method more than once will not have an effect.
+       * The first time this method is called, the object will be destroyed.
+       * 
+       * @see AutoCloseable#close()
        */
-//      public final boolean 
-      private boolean 
-    release() {
+      public final @Override void
+    close() {
         
             long newCount = REFERENCE_COUNT_UPDATER.decrementAndGet (this);
-        
-//            if (resourceReference != null)
-//                resourceReference.trace ("Object released. Reference count is now {}.", newCount);
             
-            if (newCount == 0) 
-            {
-                try {
-                    destroy();
-                }
+            if (newCount < 0)
+                return;
+            
+            try {
+                destroy();
+            }
                 finally {
                     if (resourceReference != null) {
                         // Recent versions of the JDK have a nasty habit of prematurely deciding objects are unreachable.
@@ -164,47 +116,9 @@ abstract class CloseableObject implements AutoCloseable {
                         synchronized (this)
                         {
                             resourceReference.close();
-                        }
                     }
                 }
-                
-                return true;
             }
-//            else if (!idempotentClose && newCount <= -1) 
-//            {
-//                throw new AssertionError ("Tried to release a destroyed object"
-//                        + (resourceReference != null ? resourceReference.getTracesString() : ""));
-//            }
-            else
-                return false;
-        }
-
-//      /** 
-//       * {@code close} simply calls {@link #release release}.
-//       * The intent is to allow patterns such as:
-//       * <pre>
-//       * try (new MyReferenceCountedObject())
-//       * { ... }
-//       * 
-//       * try (refCountedObject.retain())
-//       * { ... }
-//       * 
-//       * {@literal @}lombok.Cleanup var a = new MyReferenceCountedObject();
-//       * </pre>
-//       */
-      /**
-       * Closes this resource, relinquishing any underlying resources.
-       * This method is invoked automatically on objects managed by the
-       * {@code try}-with-resources statement.
-       * 
-       * <p> This method is idempotent. In other words,
-       * calling this {@code close} method more than once will not have an effect.
-       * The first time this method is called, the object will be destroyed.
-       */
-      public final @Override void
-    close() {
-        
-            release();
         }
 
       /**
