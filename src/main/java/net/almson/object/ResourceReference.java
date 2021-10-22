@@ -153,15 +153,14 @@ final class ResourceReference extends WeakReference<Object> implements Iterable<
                 };
         }
 
-      public boolean 
-    close() {
+      /**
+       * Unregisters the resource from the leak detector.
+       */
+      public void 
+    unregister() {
         
-            if (remove()) 
-            {
-                super.clear(); // try to prevent the reference from being enqueued
-                return true;
-            }
-            return false;
+            remove();
+            super.clear(); // try to prevent the reference from being enqueued
         }
 
       public void 

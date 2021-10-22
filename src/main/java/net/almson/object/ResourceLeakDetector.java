@@ -185,8 +185,8 @@ public class ResourceLeakDetector {
 //        }
 
       /**
-       * Creates a new {@link ResourceReference} which is expected to be closed via {@link ResourceReference#close()} when the
-       * related resource is deallocated.
+       * Creates a new {@link ResourceReference} which is expected to be 
+       * {@link ResourceReference#unregister() unregistered} when the referenced resource is released.
        *
        * @return the {@link ResourceLeak} or {@code null}
        */
@@ -216,9 +216,7 @@ public class ResourceLeakDetector {
                     ; ref != null
                     ; ref = (ResourceReference) referenceQueue.poll()) 
             {
-                if (!ref.close())
-                    continue;
-                
+                ref.unregister();
                 logLeak (ref);
             }
         }
@@ -240,7 +238,7 @@ public class ResourceLeakDetector {
             {
                 for (ResourceReference ref : refListHead)
                 {
-                    ref.close();
+                    ref.unregister();
                     logLeak (ref);
                 }
             }

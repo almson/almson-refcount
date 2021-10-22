@@ -116,7 +116,7 @@ abstract class CloseableObject implements AutoCloseable {
                     // Java 8:
                     synchronized (this)
                     {
-                        resourceReference.close();
+                        resourceReference.unregister();
                     }
                 }
             }

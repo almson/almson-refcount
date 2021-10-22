@@ -187,7 +187,7 @@ abstract class ReferenceCountedObject implements AutoCloseable {
                         // Java 8:
                         synchronized (this)
                         {
-                            resourceReference.close();
+                            resourceReference.unregister();
                         }
                     }
                 }
