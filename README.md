@@ -2,6 +2,14 @@
 
 `almson-refcount` is a reference counting implementation for Java derived from [Netty](netty.io). It aims to be robust, simple, efficient, and clever. A major reason to use it is the leak detection system. **You may also use the leak detection system without using reference counting.**
 
+# Installation with Maven
+
+    <dependency>
+        <groupId>net.almson</groupId>
+        <artifactId>almson-refcount</artifactId>
+        <version>1.0.0</version>
+    </dependency>
+
 # Reference counting
 
 Reference counting is like a more flexible version of `AutoCloseable`. It allows you to do manual, deterministic resource management while letting you pass your resources between objects and methods without deciding on a chain of ownership. Each object has a "reference count" which is initially set to 1. The `close` or `release` method (they both do the same thing) decrements the reference count. When the reference count reaches 0, the object's `destroy` method is called, performing any necessary cleanup. What makes reference counting different from AutoCloseable is the `retain` method, which increments the reference count. Call `retain` on objects which someone else might destroy. This way, the object won't be destroyed until both of you call `close`. Make sure the number of `close/release` calls is 1 more than the number of calls to `retain` by the time everyone is done using the object, or you will cause a resource leak! Thankfully, you will be warned when you call `close/release` too often or too little.
