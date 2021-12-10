@@ -5,7 +5,7 @@
     <groupId>net.almson</groupId>
     <artifactId>almson-refcount</artifactId>
     <packaging>jar</packaging>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     
     <name>Almson Ref-Count</name>
     <url>https://github.com/almson/almson-refcount</url>
@@ -27,7 +27,7 @@
         <url>https://github.com/almson/almson-refcount</url>
         <connection>scm:git:git://github.com/almson/almson-refcount.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/almson/almson-refcount.git</developerConnection>
-        <tag>HEAD</tag>
+        <tag>v1.0.0</tag>
     </scm>
 
     <developers>
